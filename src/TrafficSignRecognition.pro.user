@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 4.14.2, 2021-05-18T00:21:43. -->
+<!-- Written by QtCreator 4.14.2, 2021-05-23T00:15:49. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -131,7 +131,6 @@
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Debug</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.Qt4BuildConfiguration</value>
     <value type="int" key="Qt4ProjectManager.Qt4BuildConfiguration.BuildConfiguration">2</value>
-    <value type="int" key="RunSystemFunction">0</value>
    </valuemap>
    <valuemap type="QVariantMap" key="ProjectExplorer.Target.BuildConfiguration.1">
     <value type="QString" key="ProjectExplorer.BuildConfiguration.BuildDirectory">/mnt/sda1/faculta/an3/pi/proiect/Traffic sign recognition/build-TrafficSignRecognition-Desktop_Qt_6_0_4_GCC_64bit-Release</value>

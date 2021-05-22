@@ -9,7 +9,7 @@ SOURCES += \
 # add open CV
 unix {
     CONFIG += link_pkgconfig
-    PKGCONFIG += opencv4
+    PKGCONFIG += opencv4 tesseract
 }
 
 #sudo apt-get install libopencv-dev  pentru a vedea librariile opencv4
