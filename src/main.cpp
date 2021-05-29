@@ -3,6 +3,9 @@
 #include "opencv4/opencv2/opencv.hpp"
 #include "tesseract/baseapi.h"
 #include "leptonica/allheaders.h"
+#define DETECTION_TEXT_COLOR Scalar(251,240,248)
+#define DETECTION_BOX_COLOR Scalar(238,32,99)
+#define DETECTION_TEXT_BOX_COLOR Scalar(238,32,99)
 using namespace std;
 using namespace cv;
 
@@ -12,7 +15,6 @@ Vec3b RGB2HSV(Vec3b pixel){
     unsigned char R = pixel[2];   //R
     unsigned char G = pixel[1];   //G
     unsigned char B = pixel[0];   //B
-
 
     r = R / 255.0;
     g = G / 255.0;
@@ -61,71 +63,42 @@ bool checkRed(Vec3b pixel){
     unsigned char H = pixel[0];
     unsigned char S = pixel[1];
     unsigned char V = pixel[2];
-    return ((H>240 || H<10) && S>40 && V>30) ? true : false;
+    return ((H>235 || H<10) && S>40 && V>30) ? true : false;
 }
-
-//check if HSV is in yellow range of RGB
-bool checkYellow(Vec3b pixel){
-    unsigned char H = pixel[0];
-    unsigned char S = pixel[1];
-    unsigned char V = pixel[2];
-    return ((H >= 18 && H<=45) && S>=148 && V>=66) ? true : false;
-}
-
-//check if HSV is in blue range of RGB
-bool checkBlue(Vec3b pixel){
-    unsigned char H = pixel[0];
-    unsigned char S = pixel[1];
-    unsigned char V = pixel[2];
-    return ((H>120 && H<=175) && S>=127.5 && V>=20) ? true : false;
-}
-
 
 //check if HSV is in black range of RGB
 bool checkBlack(Vec3b pixel){
     unsigned char H = pixel[0];
     unsigned char S = pixel[1];
     unsigned char V = pixel[2];
-    return ((H>=10 && H<=210) && (S>=10 && S <= 205) && (V>=0 && V <= 65)) ? true : false;
+//    return (H<=240 && S<= 165 && V <= 65) ? true : false;
+        return (H<=240 && S<= 155 && V <= 70) ? true : false;
 }
 
-//dilation
+
 Mat computeDilation(Mat originalImage) {
-    Mat dilatedImage;
-    int morph_size = 2;
-    Mat element = getStructuringElement(
-            MORPH_ELLIPSE, Size(2 * morph_size + 1,
-                             2 * morph_size + 1),
-            Point(morph_size, morph_size));
+    int ii = 0;
+    int jj = 0;
+    int di[] = { -1,-1, 0, 1,  1, 1, 0, -1 };
+    int dj[] = { 0 ,-1,-1, -1, 0, 1, 1, 1 };
+    Mat dilatedImage = originalImage.clone();
 
-        dilate(originalImage, dilatedImage, element,Point(-1, -1), -1);
+    for (int i = 0; i < originalImage.rows; i++ ) {
+        for (int j = 0; j < originalImage.cols; j++) {
+            if (originalImage.at<uchar>(i, j) == 0) {
+                for (int k = 0; k < 8; k++) {
+                    //desenam pixelii vecini cu negru
+                    ii = i + di[k] < 0 ? 0 : (i + di[k] >= originalImage.rows ? originalImage.rows-1 : i + di[k]);
+                    jj = j + dj[k] < 0 ? 0 : (j + dj[k] >= originalImage.cols ? originalImage.cols-1 : j + dj[k]);
 
+                    dilatedImage.at<uchar>(ii, jj) = 0; //aaaaaaaaaa
+                }
+            }else {
+                dilatedImage.at<uchar>(i, j) = 255;  //pixel fundal este copiat pur si simplu
+            }
+        }
+    }
     return dilatedImage;
-}
-
-Mat computeErosion(Mat originalImage) {
-    Mat erodedImage;
-    int morph_size = 2;
-    Mat element = getStructuringElement(
-            MORPH_ELLIPSE, Size(2 * morph_size + 1,
-                             2 * morph_size + 1),
-            Point(morph_size, morph_size));
-
-    erode(originalImage, erodedImage, element,Point(-1, -1), -1);
-
-    return erodedImage;
-}
-
-Mat computeOpening(Mat originalImage) {
-    Mat openingMat = computeErosion(originalImage);
-    openingMat = computeDilation(openingMat);
-    return openingMat;
-}
-
-Mat computeClosing(Mat originalImage) {
-    Mat closingMat = computeDilation(originalImage);
-    closingMat = computeErosion(closingMat);
-    return closingMat;
 }
 
 // src = source image matrix(hsv space color)
@@ -137,10 +110,8 @@ Mat obtainRoi(Mat src, bool (*checkColor) (Vec3b)) {
         for (int j = 0; j < src.cols; j++) {
             Vec3b pixel = src.at<Vec3b>(i, j);
             roiImg.at<uchar>(i, j) = checkColor(pixel) ? 255 : 0;
-
         }
     }
-
     return roiImg;
 }
 
@@ -156,16 +127,95 @@ Mat convertImg2HSV(Mat sign){
     return hsvImg;
 }
 
-Mat detectSpeedLimit(Mat sign){
+void writeSpeedLimitOnImage(Mat src, Point center, int radius, float size ,string speedLimit){
+    string text, text2;
+    Point p1;
+
+    if(((center.x - radius)-215) >= 0  && (center.y-25) >= 0){
+        //place text on the left of the sign if there is enough
+        int x = center.x - radius;
+        int y = center.y;
+        p1 = Point(x, y);
+        Point p3(x, y), p4(x,y);
+
+        if(speedLimit.empty()){
+            //case 1
+            p3.x -= 135;
+            p3.y -= 20;
+            p4.x -= 10;
+            p4.y += 15;
+            text = "unknown";
+            rectangle(src,p3,p4,DETECTION_TEXT_BOX_COLOR, FILLED, LINE_AA);
+            p1.x -= 130;
+        }else{
+            //case 2
+
+            //drawing the box that wraps the text
+            p3.x -= 215;
+            p3.y -= 25;
+            p4.x -= 10;
+            p4.y += 35;
+            rectangle(src,p3,p4,DETECTION_TEXT_BOX_COLOR, FILLED, LINE_AA);
+
+            //writing first line
+            p1.x -= 175;
+            speedLimit.pop_back();
+            text2 = speedLimit + " km/h" ;
+            text = "speed limit sign";
+            putText( src, text2, p1, FONT_HERSHEY_COMPLEX_SMALL, size, DETECTION_TEXT_COLOR, 1, LINE_AA);
+            p1.y += 20;
+            p1.x -= 40;
+        }
+    }else{
+        //place text on the bottom of the sign if there is enough
+        int x = center.x - radius;
+        int y = center.y + radius;
+        p1 = Point(x, y);
+        Point p3(x, y), p4(x,y);
+
+        if(speedLimit.empty()){
+            //case 1
+            p3.y += 15; //-20
+            p4.x += 125;
+            p4.y += 50;
+            text = "unknown";
+            rectangle(src,p3,p4,DETECTION_TEXT_BOX_COLOR, FILLED, LINE_AA);
+            p1.x += 5;
+            p1.y += 35;
+        }else{
+            //case 2
+
+            //drawing the box that wraps the text
+            p3.y += 15;
+            p4.x += 205;
+            p4.y += 65;
+            rectangle(src,p3,p4,DETECTION_TEXT_BOX_COLOR, FILLED, LINE_AA);
+
+            //writing first line
+            p1.x += 40;
+            p1.y += 35;
+            speedLimit.pop_back();
+            text2 = speedLimit + " km/h" ;
+            text = "speed limit sign";
+            putText( src, text2, p1, FONT_HERSHEY_COMPLEX_SMALL, size, DETECTION_TEXT_COLOR, 1, LINE_AA);
+            p1.y += 20;
+            p1.x -= 40;
+        }
+    }
+
+    putText( src, text, p1, FONT_HERSHEY_COMPLEX_SMALL, size, DETECTION_TEXT_COLOR, 1, LINE_AA);  //writing second line if case 2 or first line if case 1
+}
+
+//return speed limit written on traffic sign
+string detectSpeedLimit(Mat sign){
 
     Mat signRoi = obtainRoi(sign, checkBlack);
 
-    //preprocessing image
-//    signRoi = computeDilation(signRoi);
-//    medianBlur(signRoi, signRoi, 5);
+//    preprocessing image
     bitwise_not(signRoi,signRoi);
+    signRoi = computeDilation(signRoi);
 
-    char *otxt;
+    string speedLimit;
     tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
 
    // initialize tesseract-ocr with English
@@ -178,35 +228,35 @@ Mat detectSpeedLimit(Mat sign){
     api->SetVariable("tessedit_char_whitelist", "0123456789");
     api->SetImage(signRoi.data,signRoi.cols,signRoi.rows,1,signRoi.step);
 
-    otxt = api->GetUTF8Text();
-    printf("Speed limit: %s\n",otxt);
+    speedLimit = string(api->GetUTF8Text());
+    cout<<speedLimit;
 
     api->End();
     delete api;
-    delete [] otxt;
 
-
-    return signRoi;
+    return speedLimit;
 }
 
 void detectTrafficSign(String pathImage){
+    string speedLimit;
     Mat srcImage = imread(pathImage, IMREAD_UNCHANGED);
 
-    //color based filter
+    // color based filter
     Mat srcRoi = convertImg2HSV(srcImage);
     srcRoi = obtainRoi(srcRoi, checkRed);
 
-//    preprocessing
-//    testROI = computeDilation(testROI);
-    medianBlur(srcRoi, srcRoi, 7);
+    // preprocessing the binary image
+    bitwise_not(srcRoi, srcRoi);
+    srcRoi = computeDilation(srcRoi);
+    medianBlur(srcRoi, srcRoi, 9);
+    bitwise_not(srcRoi, srcRoi);
 
-    //shaped based filtering
+   //shaped based filtering
     vector<Vec3f> circles;
-    HoughCircles(srcRoi, circles, HOUGH_GRADIENT, 1.5, srcRoi.rows/8, 200, 50, 0, srcRoi.cols/2);
+    HoughCircles(srcRoi, circles, HOUGH_GRADIENT, 1, srcRoi.rows/8, 200, 25, 0, srcRoi.cols/2);
 
 
     //drawing circles
-    Mat m1;
     for( size_t i = 0; i < circles.size(); i++ )
        {
            Vec3i c = circles[i];
@@ -220,51 +270,48 @@ void detectTrafficSign(String pathImage){
            int x2 = center.x + radius;
            int y2 = center.y + radius;
            Point p2 = Point(x2, y2);
-           rectangle(srcImage,p1,p2,Scalar(0,255,0), 3, LINE_AA);
+           rectangle(srcImage,p1,p2,DETECTION_BOX_COLOR, 3, LINE_AA);
 
            //detect speed limit
            Rect r = Rect(p1,p2);
            Mat sign = srcImage(r);
            sign = convertImg2HSV(sign);
 
-           //improving the contrast in an image using histogram equalization
+//           //improving the contrast in an image using histogram equalization
            vector<Mat> channels;
            split(sign, channels);
            equalizeHist(channels[2], channels[2]);
            merge(channels, sign);
-           m1 = detectSpeedLimit(sign);
-
-           std::ostringstream oss;
-           oss << "signTest" << i;
-           std::string imgName = oss.str();
-
-           imshow(imgName, m1);
+           speedLimit = detectSpeedLimit(sign);
+           writeSpeedLimitOnImage(srcImage, center, radius, 1 ,speedLimit);
        }
 
-    imshow("Orignal image", srcImage);
-    imshow("Binary image", srcRoi);
+    imshow("Sign detection", srcImage);
+//    imshow("Binary image", srcRoi);
     waitKey(0);
 }
 
 
 int main()
 {
-    detectTrafficSign("test images/photo1.jpg");
+//    detectTrafficSign("test images/photo2.jpg");
+    detectTrafficSign("test images/photo101.jpg");
+//    detectTrafficSign("test images/photo2.jpg");
+//    detectTrafficSign("test images/photo3.jpg");
+//    detectTrafficSign("test images/photo4.jpg");
+//    detectTrafficSign("test images/photo5.jpg");
+//    detectTrafficSign("test images/photo6.jpg");
+//    detectTrafficSign("test images/photo7.jpg");
+//    detectTrafficSign("test images/photo8.jpg");
+//    detectTrafficSign("test images/photo9.jpg");
+//    detectTrafficSign("test images/photo10.jpg");
+//    detectTrafficSign("test images/photo11.jpg");
+//    detectTrafficSign("test images/photo13.jpg");
+//    detectTrafficSign("test images/photo12.jpg");
+//    detectTrafficSign("test images/photo102.jpg");
 
     return 0;
 }
-
-
-//in detect sign
-
-//cvtColor(sign, sign, COLOR_BGR2HSV);
-//vector<Mat> channels;
-//split(sign, channels);
-//equalizeHist(channels[2], channels[2]);   //equalizam dupa V
-//merge(channels, sign);
-//cvtColor(sign, sign, COLOR_HSV2BGR);
-
-
 
 
 
